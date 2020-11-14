@@ -1,0 +1,543 @@
+source('util/libraries.R')
+source('util/plots.R')
+source('util/functions.R')
+
+feasible_covariates2 <- c(
+  'vl_rendabruta',
+  'max_cd_risco',
+  'soma_vl_saldo',
+  'soma_qt_parcelaspagas',
+  'soma_qt_parcelasatraso',
+  'm1_teve_atraso',
+  'max_qtdif',
+  'max_qtdop',
+  'lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NA_RENEG', # ? (Nao-Linear e 'Nao Fez' presente)
+  'lag_acum_3_TEVE_RENEG',
+  'lag_acum_3_min_SALDO_DIVIDA',
+  'lag_acum_3_n_acordos',
+  'lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NO_ACORDO', # (faz mais sentido do que as de acordo somente (por causa))
+  'lag_acum_3_mean_TEMPO_ENTRE_PAGOU_PRIMEIRA_ATE_QUEBRA',
+  'lag_acum_3_TEVE_ACORDO', # (pode substituir o lag_acum_3_n_acordos)
+  'arrecad_int_e_ext_1m',
+  'dummy_value_imob_cred_vencer',
+  'dummy_value_veic_cred_vencer',
+  'razao_saldo_renda'
+)
+
+# To retrieve CPF information
+df_full_safrada <- read_feather('data/model/df_full_safrada.feather') %>% 
+  select(y, nr_cpf_cnpj, dt_safra, feasible_covariates2) %>% 
+  mutate(op_por_if = max_qtdop / max_qtdif) %>% 
+  select(-max_qtdop, -max_qtdif) %>% 
+  mutate(log_op_por_if_cat = cut(log(op_por_if), breaks = c(0, 0.5, 1, 1.5, Inf), include.lowest = TRUE),
+         log_razao_saldo_renda_cat = cut(log(razao_saldo_renda), breaks = c(-Inf, 0, 0.5, 1, Inf), include.lowest = TRUE),
+         lag_acum_3_n_acordos_cat = cut(lag_acum_3_n_acordos, breaks = c(-Inf, 0, 1, 2, 3, 4, Inf), include.lowest = TRUE),
+         soma_qt_parcelaspagas_cat = cut(soma_qt_parcelaspagas, breaks = c(-Inf, 0, 1, 2, 3, 4, Inf), include.lowest = TRUE),
+         soma_qt_parcelasatraso_cat = cut(soma_qt_parcelasatraso, breaks = c(-Inf, 1, 5, 10, 20, Inf), include.lowest = TRUE)
+  ) %>% 
+  rename(FL_RE3 = lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NA_RENEG,
+         FL_AC3 = lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NO_ACORDO) %>% 
+  mutate(lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NA_NEGOCIACAO = case_when(
+    
+    (FL_RE3 == 'Sim') & (FL_AC3 == 'Sim') ~ 'Sim',
+    (FL_RE3 == 'Sim') & (FL_AC3 == 'Nao') ~ 'Sim',
+    (FL_RE3 == 'Sim') & (FL_AC3 == 'Nao Fez') ~ 'Sim',
+    (FL_RE3 == 'Sim') & (FL_AC3 == 'Incerto') ~ 'Sim',
+    
+    (FL_RE3 == 'Nao') & (FL_AC3 == 'Sim') ~ 'Sim',
+    (FL_RE3 == 'Nao') & (FL_AC3 == 'Nao') ~ 'Nao',
+    (FL_RE3 == 'Nao') & (FL_AC3 == 'Nao Fez') ~ 'Nao',
+    (FL_RE3 == 'Nao') & (FL_AC3 == 'Incerto') ~ 'Incerto',
+    
+    (FL_RE3 == 'Nao Fez') & (FL_AC3 == 'Sim') ~ 'Sim',
+    (FL_RE3 == 'Nao Fez') & (FL_AC3 == 'Nao') ~ 'Nao',
+    (FL_RE3 == 'Nao Fez') & (FL_AC3 == 'Nao Fez') ~ 'Nao Fez',
+    (FL_RE3 == 'Nao Fez') & (FL_AC3 == 'Incerto') ~ 'Incerto',
+    
+    (FL_RE3 == 'Incerto') & (FL_AC3 == 'Sim') ~ 'Sim',
+    (FL_RE3 == 'Incerto') & (FL_AC3 == 'Nao') ~ 'Incerto',
+    (FL_RE3 == 'Incerto') & (FL_AC3 == 'Nao Fez') ~ 'Incerto',
+    (FL_RE3 == 'Incerto') & (FL_AC3 == 'Incerto') ~ 'Incerto',
+    
+  )) %>% 
+  select(-lag_acum_3_mean_TEMPO_ENTRE_PAGOU_PRIMEIRA_ATE_QUEBRA,
+         -lag_acum_3_min_SALDO_DIVIDA,
+         -op_por_if,
+         -vl_rendabruta,
+         -soma_vl_saldo,
+         -razao_saldo_renda,
+         -lag_acum_3_n_acordos,
+         -soma_qt_parcelaspagas,
+         -soma_qt_parcelasatraso,
+         -FL_RE3,
+         -FL_AC3) %>% 
+  mutate_if(is.character, fct_explicit_na) %>% 
+  mutate_if(is.factor, fct_explicit_na) %>% 
+  mutate(Y = ifelse(y == 'Ruim', 1, 0)) %>% 
+  select(-y) %>% 
+  select(-lag_acum_3_TEVE_RENEG, 
+         -lag_acum_3_TEVE_ACORDO)
+
+db_compromet_total_pre <- readRDS('data/model/REVISADO_SCR/db_compromet_total_pre.rds')
+db_op_if_total_pre <- read_feather('data/model/REVISADO_SCR/db_op_if_total_pre.feather')
+
+
+
+db_compromet_total <- db_compromet_total_pre %>% 
+  mutate_at(vars(starts_with('v')), funs(replace_na(., 0))) %>%
+  mutate(tipo = case_when(
+    modl == 211 ~ 'imob',
+    modl == 901 ~ 'imob',
+    modl == 902 ~ 'imob',
+    modl == 903 ~ 'imob',
+    modl == 990 ~ 'imob',
+    modl == 1202 ~ 'imob',
+    modl == 401 ~ 'veic',
+    modl == 1206 ~ 'veic'
+  ),
+  soma = v110+v120+v130+v140+v150+v160+v165+v170+v175+v180+v190+v199) %>% 
+  select(dtbase, cd, tipo, soma) %>% 
+  group_by(dtbase, cd, tipo) %>% 
+  summarize(soma = sum(soma, na.rm = T),
+            dummy = ifelse(soma > 0, 1, 0)) %>% 
+  select(-soma) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = c(dtbase, cd),
+              names_from = tipo, 
+              values_from = dummy) %>% 
+  mutate_at(vars(veic, imob), funs(replace_na(., 0)))
+
+db_op_if_total <- db_op_if_total_pre %>% 
+  mutate(log_op_por_if_cat = cut(log(qtdop / qtdif), breaks = c(-Inf, 0, 0.5, 1, 1.5, Inf), include.lowest = TRUE)) %>% 
+  select(-qtdif, -qtdop)
+
+df_full_safrada <- df_full_safrada %>% 
+  mutate(dt_safra_scr = floor_date(dt_safra %m-% months(2), 'month')) %>% 
+  mutate(dt_safra_scr = as.character(dt_safra_scr)) %>% 
+  select(-dummy_value_imob_cred_vencer, -dummy_value_veic_cred_vencer, -log_op_por_if_cat) %>% 
+  left_join(db_compromet_total, by = c('dt_safra_scr' = 'dtbase', 
+                                       'nr_cpf_cnpj' = 'cd')) %>% 
+  left_join(db_op_if_total, by = c('dt_safra_scr' = 'dtbase', 
+                                   'nr_cpf_cnpj' = 'cd'))
+  
+
+df_full_safrada <- df_full_safrada %>% 
+  mutate_at(vars(veic, imob), funs(replace_na(., 0))) %>% 
+  mutate(veic = factor(veic),
+         imob = factor(imob)) %>% 
+  mutate_at(vars(log_op_por_if_cat, imob, veic), funs(fct_explicit_na))
+
+df_full_safrada <- df_full_safrada %>% 
+  select(-nr_cpf_cnpj, -dt_safra_scr)
+
+plota_tx_interesse(df_full_safrada %>% filter(log_op_por_if_cat != '(Missing)'), 
+                  var_x = 'log_op_por_if_cat', 
+                  var_y = 'Y', 
+                  flag_interesse = '1',
+                  ylim = NA)
+
+plota_tx_interesse(df_full_safrada %>% filter(log_razao_saldo_renda_cat != '(Missing)'), 
+                   var_x = 'log_razao_saldo_renda_cat', 
+                   var_y = 'Y', 
+                   flag_interesse = '1',
+                   ylim = NA)
+
+plota_tx_interesse(df_full_safrada, 
+                   var_x = 'imob', 
+                   var_y = 'Y', 
+                   flag_interesse = '1',
+                   ylim = NA)
+
+plota_tx_interesse(df_full_safrada, 
+                   var_x = 'veic', 
+                   var_y = 'Y', 
+                   flag_interesse = '1',
+                   ylim = NA)
+
+
+plota_tx_interesse(df_full_safrada, 
+                   var_x = 'soma_qt_parcelasatraso_cat', 
+                   var_y = 'Y', 
+                   flag_interesse = '1',
+                   ylim = NA)
+
+
+
+# Base de Treino do Modelo
+db_train <-
+  df_full_safrada %>%
+  filter(dt_safra < '2019-11-30') %>% 
+  select(-dt_safra)
+
+# Base de Teste do Modelo
+db_test <-
+  df_full_safrada %>%
+  filter(dt_safra >= '2019-11-30') %>% 
+  select(-dt_safra)
+
+
+# Baseline Model: Logistic regression
+base_logistic <- glm(Y ~ ., data = db_train, family = binomial(link = 'logit'))
+summary(base_logistic)
+
+p <- predict(base_logistic, db_test, type = "response")
+
+aux <- tibble(y_hat = p, group = db_test$Y)
+ks_est <- generate_ks(aux, 'y_hat', group, '0', '1')
+
+ggplot(aux, aes(x = y_hat, col = as.factor(group))) +
+  stat_ecdf(geom = "step") +
+  ggtitle(paste0('KS = ', ks_est))
+
+# Logistic Regression KS: 0.568782
+
+
+
+# Machine Learning com H2O
+
+# Starts of AutoML ----
+h2o.init()
+
+# For classification, the y column must be a factor (https://www.rdocumentation.org/packages/h2o/versions/3.26.0.2/topics/h2o.automl)
+df_full_safrada_h2o <- df_full_safrada %>% 
+  mutate(Y = as.factor(Y)) %>%
+  mutate_if(sapply(., is.character), as.factor)
+
+# Convert data to h2o frame
+data_hf <- as.h2o(df_full_safrada_h2o)
+
+# Identify target and features
+y <- 'Y'
+x <- setdiff(colnames(data_hf), c(y, 'dt_safra'))
+
+
+# Split data into train & validation sets
+#sframe <- h2o.splitFrame(data = data_hf, ratios = 0.80, seed = 42)
+train <- as.h2o(df_full_safrada_h2o %>% filter(dt_safra < '2019-11-30'))
+valid <- as.h2o(df_full_safrada_h2o %>% filter(dt_safra >= '2019-11-30'))
+
+# Metric for binary classification (deviance is the default). Check documentation here http://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
+automl_model <- h2o.automl(x = x, 
+                           y = y,
+                           balance_classes = TRUE,
+                           training_frame = train,
+                           nfolds = 0, # Default is nfolds = 5!!!
+                           validation_frame = valid, # read help(h2o.automl) !!!Optional. This argument is ignored unless the user sets nfolds = 0!!!
+                           leaderboard_frame = valid,
+                           max_runtime_secs = 60 * 60 * 12,
+                           #exclude_algos = c("GLM", "DeepLearning", "DRF"),
+                           exclude_algos = "StackedEnsemble", # Global Importance of Stacked models are tricky
+                           sort_metric = "AUC")
+
+lb <- as.data.frame(automl_model@leaderboard)
+aml_leader <- automl_model@leader
+
+#lb <- readRDS('data/model/data_frame_lb.rds')
+#aml_leader <- h2o.loadModel('data/model/h2o_fitted_models/GBM_grid_1_AutoML_20200325_174645_model_27')
+
+saveRDS(lb, 'data/model/data_frame_lb.rds')
+h2o.saveModel(object = aml_leader, path = 'data/model/h2o_fitted_models', force=TRUE)
+
+pred <- h2o.predict(object = aml_leader, newdata = valid) %>% 
+  as.data.frame()
+
+aux <- tibble(y_hat = pred$p1, group = as.data.frame(valid)$Y)
+ks_est <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+ggplot(aux, aes(x = y_hat, col = as.factor(group))) +
+  stat_ecdf(geom = "step") +
+  ggtitle(paste0('KS = ', ks_est))
+
+print(paste0('KS (automl) = ', ks_est))
+
+# # KS 12 hours: 0.5699818
+# H2OBinomialModel: gbm
+# Model Key:  GBM_grid_1_AutoML_20200325_174645_model_27 
+# Model Summary: 
+#   number_of_trees number_of_internal_trees model_size_in_bytes min_depth max_depth mean_depth min_leaves max_leaves mean_leaves
+# 1            1190                     1190             1926027         7         7    7.00000         99        128   124.25714
+
+(vip(aml_leader, num_features = 150) + 
+    ggtitle(aml_leader@model_id) + 
+    iyl) %>% 
+  ggplotly() %>% 
+  config(modeBarButtonsToRemove = plotly_buttons)
+
+
+
+
+# Tweaked logistic regression:
+tweaked_logistic <- glm(Y ~ . - imob, # Y ~ . + lag_acum_3_n_acordos_cat:lag_acum_3_PAGOU_ALGUMA_PRIMEIRA_NA_NEGOCIACAO, 
+                        data = db_train, 
+                        family = binomial(link = 'logit'))
+summary(tweaked_logistic)
+
+saveRDS(stripGlmLR(tweaked_logistic), 'data/model/tweaked_logistic_C_H.rds')
+
+p <- predict(tweaked_logistic, db_test, type = "response")
+
+aux <- tibble(y_hat = p, group = db_test$Y)
+ks_est <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+
+ggplot(aux, aes(x = y_hat, col = as.factor(group))) +
+  stat_ecdf(geom = "step") +
+  ggtitle(paste0('KS = ', ks_est))
+
+# Tweaked Logistic Regression KS: 0.5693159
+
+# Check KS behavior among Safra and Rating
+
+# Global KS
+p <- predict(tweaked_logistic, df_full_safrada, type = "response")
+aux <- tibble(y_hat = p, group = df_full_safrada$Y)
+global_ks <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+
+# Safra
+kss <- numeric()
+for (i in as.character(unique(df_full_safrada$dt_safra))) {
+  
+  df_aux <- df_full_safrada %>% 
+    filter(dt_safra == i)
+  
+  p <- predict(tweaked_logistic, df_aux, type = "response")
+  aux <- tibble(y_hat = p, group = df_aux$Y)
+  ks_est <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+  
+  kss <- c(kss, ks_est)
+  
+}
+
+tb_time <- tibble(dt_safra = as.character(unique(df_full_safrada$dt_safra)),
+                  ks = kss)
+(tb_time %>% 
+    ggplot(aes(y = kss, x = dt_safra)) +
+    geom_bar(stat = 'identity', fill = '#7AC244') +
+    geom_text(aes(y = kss, x = dt_safra, label=round(kss, 4)))) %>% 
+  ggplotly()
+
+
+# Rating
+kss <- numeric()
+for (i in as.character(unique(df_full_safrada$max_cd_risco))) {
+  
+  df_aux <- df_full_safrada %>% 
+    filter(max_cd_risco == i)
+  
+  p <- predict(tweaked_logistic, df_aux, type = "response")
+  aux <- tibble(y_hat = p, group = df_aux$Y)
+  ks_est <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+  
+  kss <- c(kss, ks_est)
+  
+}
+
+tb_rating <- tibble(max_cd_risco = as.character(unique(df_full_safrada$max_cd_risco)),
+                  ks = kss)
+(tb_rating %>% 
+    ggplot(aes(y = kss, x = max_cd_risco)) +
+    geom_bar(stat = 'identity', fill = '#7AC244') +
+    geom_text(aes(y = kss, x = max_cd_risco, label=round(kss, 4)))) %>% 
+  ggplotly()
+
+
+
+# Faixa de Score
+p <- predict(tweaked_logistic, df_full_safrada, type = "response")
+p <- 100 * (1 - p)  #100 - (p - min(p))/diff(range(p)) * 100
+
+df_full_safrada %>% 
+  mutate(score = p) %>% 
+  select(Y, score) %>% 
+  plota_tx_interesse(var_x = 'score',
+                     var_y = 'Y',
+                     flag_interesse = '1',
+                     ylim = NA)
+
+
+(df_full_safrada %>% 
+    mutate(score = p) %>% 
+    select(Y, score) %>% 
+    ggplot(aes(x=score, fill = as.factor(Y))) +
+    geom_density(alpha = 0.3)) %>% 
+  ggplotly()
+
+
+
+df_full_safrada %>% 
+  mutate(score = p) %>% 
+  select(Y, score) %>% 
+  mutate(score_cat = cut_number(score, 20, dig.lab = 4)) %>% 
+  group_by(score_cat) %>%
+  summarize(tx_bad = sum(Y == '1') / n())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# POr saltos homogeneos de Score e KSs intra grupos
+p <- predict(tweaked_logistic, df_full_safrada, type = "response")
+
+aux <- (1-p)/100
+aux2 <- (aux - min(aux)) / diff(range(aux)) / 100
+
+agibankR::pct_faixa_plot(
+  df_full_safrada %>% 
+    mutate(score = (1-p)/100) %>% # (1-p)/100) %>% 
+    select(Y, score), 
+  str_pred = 'score',
+  str_resp = 'Y',
+  str_bom = '1',
+  #cuts = seq(0, 0.05, 0.001)#c(0,0.02,seq(0.02, 1, .001))*100
+  cuts = seq(0, 0.3, 0.01)
+) +
+  ggtitle("Teste Quant 10% - Score") +
+  ylim(c(0,100))
+
+
+
+
+
+# Artificial value: simulating a very good model
+p <- predict(tweaked_logistic, df_full_safrada, type = "response")
+
+
+fake_df_full_safrada <- bind_rows(
+  
+  df_full_safrada %>% 
+  filter(Y == '1') %>% 
+  sample_n(1000) %>%
+  #mutate(pnorm = rnorm(1215150, 0.4, 0.05)),
+  mutate(pnorm = rnorm(1000, 0.4, 0.05)),
+
+  df_full_safrada %>% 
+    filter(Y == '0') %>% 
+    sample_n(1000) %>%
+    #mutate(pnorm = rnorm(37575, 0.6, 0.05)))
+    mutate(pnorm = rnorm(1000, 0.6, 0.05)))
+
+fake_df_full_safrada %>% 
+  ggplot(aes(x = pnorm, col = factor(Y))) + geom_density()
+
+fake_df_full_safrada %>% 
+  ggplot(aes(x = pnorm/100)) + geom_density()
+
+#aux <- (1-fake_df_full_safrada$pnorm)#/100
+#aux2 <- (aux - min(aux)) / diff(range(aux))
+
+agibankR::pct_faixa_plot(
+  fake_df_full_safrada %>% 
+    mutate(score = pnorm/100) %>% # (1-p)/100) %>% 
+    select(Y, score), 
+  str_pred = 'score',
+  str_resp = 'Y',
+  str_bom = '1',
+  #cuts = seq(0, 0.05, 0.001)#c(0,0.02,seq(0.02, 1, .001))*100
+  cuts = seq(0, 1, 0.02)
+) +
+  ggtitle("Teste Quant 10% - Score") +
+  ylim(c(0,102))
+
+
+
+ks.test(fake_df_full_safrada %>% filter(Y == '1') %>% pull(pnorm),
+        fake_df_full_safrada %>% filter(Y == '0') %>% pull(pnorm))
+
+
+
+generate_ks(fake_df_full_safrada %>% 
+              mutate(score = pnorm/100) %>%
+              select(Y, score), 'score', 'Y', '0', '1')
+
+
+
+agibankR::pct_faixa_plot(
+  fake_df_full_safrada %>% 
+    mutate(score = (pnorm-min(pnorm))/diff(range(pnorm))/100) %>% # (1-p)/100) %>% 
+    select(Y, score), 
+  str_pred = 'score',
+  str_resp = 'Y',
+  str_bom = '1',
+  #cuts = seq(0, 0.05, 0.001)#c(0,0.02,seq(0.02, 1, .001))*100
+  cuts = seq(0, 1, 0.02)
+) +
+  ggtitle("Teste Quant 10% - Score") +
+  ylim(c(0,20))
+
+
+generate_ks(fake_df_full_safrada %>% 
+              mutate(score = pnorm/100) %>%
+              select(Y, score), 'score', 'Y', '0', '1')
+
+
+
+ks.test(fake_df_full_safrada %>% filter(Y == '1') %>% pull(pnorm),
+        fake_df_full_safrada %>% filter(Y == '0') %>% pull(pnorm))
+
+
+ks2_plot(prob_test = teste$predito,
+         pred_test = teste$resp,
+         fl_bad    = '0')
+
+
+
+df_ks_cris <- df_full_safrada %>% 
+  mutate(score = p)
+
+
+df_ks_cris2 <- df_ks_cris %>% 
+  mutate(FX_PROPENSAO_PAG_INTERNA = case_when(
+    score <= 1.071 ~ 'BAIXA',
+    score <= 2.33 ~ 'MEDIA',
+    score <= 5.809 ~ 'MEDIA ALTA',
+    score <= 13.44 ~ 'ALTA',
+    score <= 100 ~ 'MUITO ALTA',
+  ))
+
+
+# Rating
+kss <- numeric()
+for (i in as.character(unique(df_ks_cris2$FX_PROPENSAO_PAG_INTERNA))) {
+  
+  df_aux <- df_ks_cris2 %>% 
+    filter(FX_PROPENSAO_PAG_INTERNA == i)
+  
+  p <- predict(tweaked_logistic, df_aux, type = "response")
+  aux <- tibble(y_hat = p, group = df_aux$Y)
+  ks_est <- generate_ks(aux, 'y_hat', 'group', '0', '1')
+  
+  kss <- c(kss, ks_est)
+  
+}
+
+tb_rating <- tibble(FX_PROPENSAO_PAG_INTERNA = as.character(unique(df_ks_cris2$FX_PROPENSAO_PAG_INTERNA)),
+                    ks = kss)

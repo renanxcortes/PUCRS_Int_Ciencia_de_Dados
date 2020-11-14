@@ -1,0 +1,6 @@
+# Pacotes necessários ----
+library(tidyverse)
+library(lubridate)
+library(visdat)
+library(ggridges)
+library(plotly)

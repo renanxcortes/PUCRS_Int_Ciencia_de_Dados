@@ -1,0 +1,32 @@
+{
+    "id": "9CE3F899",
+    "path": null,
+    "project_path": null,
+    "type": "r_dataframe",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1605363271877.0,
+    "source_on_save": false,
+    "relative_order": 7,
+    "properties": {
+        "expression": "reviews",
+        "caption": "reviews",
+        "totalObservations": 100000,
+        "displayedObservations": 100000,
+        "variables": 7,
+        "cacheKey": "1675BF4B",
+        "object": "reviews",
+        "environment": "",
+        "contentUrl": "grid_resource/gridviewer.html?env=&obj=reviews&cache_key=1675BF4B&max_cols=50",
+        "preview": 0
+    },
+    "folds": "",
+    "lastKnownWriteTime": 2157431058992,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1605363271877,
+    "read_only": false,
+    "read_only_alternatives": []
+}

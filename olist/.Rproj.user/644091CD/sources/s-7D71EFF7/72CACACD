@@ -1,0 +1,32 @@
+{
+    "id": "72CACACD",
+    "path": null,
+    "project_path": null,
+    "type": "r_dataframe",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1605364125690.0,
+    "source_on_save": false,
+    "relative_order": 9,
+    "properties": {
+        "expression": "base_analise",
+        "caption": "base_analise",
+        "totalObservations": 101334,
+        "displayedObservations": 101334,
+        "variables": 21,
+        "cacheKey": "13993FAD",
+        "object": "base_analise",
+        "environment": "",
+        "contentUrl": "grid_resource/gridviewer.html?env=&obj=base_analise&cache_key=13993FAD&max_cols=50",
+        "preview": 0
+    },
+    "folds": "",
+    "lastKnownWriteTime": 7599382801877576738,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1605364125690,
+    "read_only": false,
+    "read_only_alternatives": []
+}

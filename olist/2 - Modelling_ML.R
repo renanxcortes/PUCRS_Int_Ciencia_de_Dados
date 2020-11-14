@@ -8,8 +8,8 @@ base_model <- readRDS('data/base_model.rds')
 
 set.seed(1234)
 
-smp_siz = floor(0.7 * nrow(base_model))
-train_ind = sample(seq_len(nrow(base_model)), size = smp_siz)
+n_treino = floor(0.7 * nrow(base_model))
+train_ind = sample(seq_len(nrow(base_model)), size = n_treino)
 
 base_treino <- base_model[train_ind,]
 base_teste <- base_model[-train_ind,]
@@ -29,6 +29,10 @@ reg_logistica <- glm(review_alto_numerico ~ .,
 summary(reg_logistica)
 
 p <- predict(reg_logistica, base_teste, type = "response")
+
+base_teste %>% 
+  mutate(probabilidade_predita = p) %>% 
+  View()
 
 # Checando AUC e plotando a curva ROC
 PRROC_obj <- roc.curve(scores.class0 = p, 
@@ -71,19 +75,20 @@ df_frame_teste <- as.h2o(df_teste)
 automl_model <- h2o.automl( 
   y = 'y',
   balance_classes = TRUE,
-  training_frame = df_frame,
+  training_frame = df_frame_treino,
   nfolds = 4,
-  max_runtime_secs = 60 * 90, # Tempo Máximo de k minutos: 60 * k
+  max_runtime_secs = 60 * 1, # Tempo Máximo de k minutos: 60 * k
   #include_algos = c('DRF', 'GBM', 'XGBoost'),
   exclude_algos = "StackedEnsemble", # Importância Global de Modelos Stacked não são triviais
-  sort_metric = "AUC")
+  sort_metric = "AUC",
+  seed = 1234)
 
 lb <- as.data.frame(automl_model@leaderboard)
 aml_leader <- automl_model@leader
 
-h2o.saveModel(object = aml_leader,
-              path = 'data/models',
-              force = TRUE)
+#h2o.saveModel(object = aml_leader,
+#              path = 'data/models',
+#              force = TRUE)
 
 # Melhorou a métrica AUC no Holdout set?
 pred <- h2o.predict(object = aml_leader, newdata = df_frame_teste) %>% 

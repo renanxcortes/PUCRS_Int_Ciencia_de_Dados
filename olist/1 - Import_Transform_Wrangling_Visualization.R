@@ -105,6 +105,13 @@ base_analise <- base_completa %>%
          seller_city) %>% 
   filter(order_status == 'delivered')
 
+# Como é a distribuição de Missings dos nossos Dados?
+
+# Visualização PARCIAL (20% da base) de Tipos e missings
+set.seed(1234)
+vis_dat(base_analise %>% 
+          sample_frac(0.2))
+
 # Verificando quantidade de missing por coluna e ordenando
 map_df(base_analise, ~sum(is.na(.))) %>% 
   gather() %>% 
@@ -116,20 +123,12 @@ sum(is.na(base_analise$atrasou)) # Opa, temos alguns Missings na variável 'atra
 base_analise <- base_analise %>% 
   drop_na(atrasou)
 
-# Como é a distribuição de Missings dos nossos Dados?
-
-# Visualização PARCIAL (20% da base) de missings
-set.seed(1234)
-vis_dat(base_analise %>% 
-          sample_frac(0.2))
-vis_miss(base_analise %>% 
-          sample_frac(0.2))
-
 
 # Exploração e Visualização ----
 
 # Antes, vale a pena olhar no Grammar of Graphics:
 # https://vita.had.co.nz/papers/layered-grammar.html
+# grammar_of_graphics.png
 
 
 # Algumas Análises Univariadas ----
@@ -159,11 +158,21 @@ base_analise %>%
   count(customer_state, sort = T) %>% 
   mutate(prop = n / sum(n))
 
+base_analise %>% 
+  count(customer_state) %>% 
+  ggplot(aes(x = customer_state, y = n)) +
+  geom_bar(stat ='identity')
+
 # payment_type
 
 base_analise %>% 
   count(payment_type, sort = T) %>% 
   mutate(prop = n / sum(n))
+
+base_analise %>% 
+  count(payment_type) %>% 
+  ggplot(aes(x = payment_type, y = n)) +
+  geom_bar(stat ='identity')
 
 # product_category_name
 
@@ -175,26 +184,29 @@ base_analise %>%
 
 summary(base_analise$price)
 
-base_analise %>% 
+p1 <- base_analise %>% 
   ggplot(aes(y = price)) +
   geom_boxplot() # Boxplot com diversos outliers
 
-base_analise %>% 
+p2 <- base_analise %>% 
   ggplot(aes(x = price)) +
   geom_density()
+
+grid.arrange(p1, p2, nrow = 1)
 # Preço é extremamente assimétrico! Temos outliers com preços acima de R$6000
 # O mais comum é transformar essa variável para estabilizá-la se é desejável incluí-la na modelagem
 
-base_analise %>% 
-  ggplot(aes(x = log(price))) +
-  geom_density() +
-  ggtitle('Variável de Preço com Transformação Logarítmica')
-
-base_analise %>% 
+pp1 <- base_analise %>% 
   ggplot(aes(y = log(price))) +
   geom_boxplot() +
   ggtitle('Boxplot de preço mais estável com a Transformação Logarítmica')
 
+pp2 <- base_analise %>% 
+  ggplot(aes(x = log(price))) +
+  geom_density() +
+  ggtitle('Variável de Preço com Transformação Logarítmica')
+
+grid.arrange(pp1, pp2, nrow = 1)
 # Nota: Boxplot pode ser problemático por não refletir a distribuição dos dados. Veremos adiante um exemplo melhor.
 
 # Frete
@@ -257,7 +269,7 @@ base_analise %>%
 base_analise %>% 
   count(frete_gratuito, sort = T) %>% 
   mutate(prop = n / sum(n))
-# Qauntidade Irrisória, não vale a pena modelar
+# Quantidade Irrisória, não vale a pena modelar
 
 # Dias de Antecipação na entrega e Atrasou
 
@@ -275,11 +287,12 @@ base_analise %>%
 # product_photos_qty
 
 base_analise %>% 
-  count(product_photos_qty)
+  count(product_photos_qty) %>% 
+  mutate(prop = n / sum(n))
 # Seria interessante imputar 0 nos NA e reclassificar essa variável
 
 
-# Análises Bivariadas relacionando com a var. dependente/resposta ----
+# Análises Bivariadas relacionando com a var. dependente/resposta (review_alto) ----
 
 # Estado vs. Review
 
@@ -297,6 +310,13 @@ base_analise %>%
                      flag_interesse = 'Nota Máxima')
 
 # Aparentemente o Estado não influencia tanto o Review
+
+# Interlúdio: O poder da Escala!
+base_analise %>% 
+  plota_tx_interesse(var_x = 'customer_state',
+                     var_y = 'review_alto',
+                     flag_interesse = 'Nota Máxima',
+                     ylim = NA)
 
 
 # payment_type vs. Review
@@ -323,6 +343,7 @@ base_analise %>%
 
 # Preço/Frete/Frete sobre Preço vs. Review
 
+# Preço
 base_analise %>% 
   group_by(review_alto) %>% 
   summarize(n = n(),
@@ -331,6 +352,7 @@ base_analise %>%
             min = min(price, na.rm = T),
             max = max(price, na.rm = T))
 
+# Frete
 base_analise %>% 
   group_by(review_alto) %>% 
   summarize(n = n(),
@@ -339,6 +361,7 @@ base_analise %>%
             min = min(freight_value, na.rm = T),
             max = max(freight_value, na.rm = T))
 
+# Frete sobre Preço
 base_analise %>% 
   group_by(review_alto) %>% 
   summarize(n = n(),
@@ -348,7 +371,14 @@ base_analise %>%
             max = max(frete_sobre_preco, na.rm = T))
 
 
-# ---- Interlúdio: o problema de Boxplots ---- #
+# ---- Interlúdio: Múltiplas Densidades e a limitação de Boxplots ---- #
+
+base_analise %>% 
+  mutate(cat_product_category_name = fct_lump(product_category_name, n = 7)) %>% 
+  group_by(cat_product_category_name) %>% 
+  summarize(mediana = median(price),
+            n = n()) %>% 
+  arrange(desc(mediana))
 
 # Relação de preço com product_category_name
 
@@ -457,7 +487,8 @@ base_analise %>%
   ggplot(aes(x = valor, 
              fill = as.factor(review_alto))) +
   geom_density(alpha = 0.5) +
-  facet_wrap(~variavel, scales = "free")
+  facet_wrap(~variavel, scales = "free") +
+  labs(fill = "Review Alto")
 
 
 # salva a base de Dados para modelagem posterior
@@ -481,10 +512,9 @@ base_model <- base_analise %>%
          review_alto_numerico)
   
 # Ainda temos NA's na base?
-base_model %>% 
+map_df(base_model, ~sum(is.na(.))) %>% 
   gather() %>% 
-  group_by(key) %>% 
-  summarize(n_missings = sum(is.na(value)))
+  arrange(desc(value))
 
 # Criamos uma classe explícita de NA para produto e imputamos NA no tipo de pagamento pela categoria mais provável
 

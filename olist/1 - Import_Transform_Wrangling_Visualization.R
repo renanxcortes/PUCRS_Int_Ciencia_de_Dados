@@ -41,6 +41,9 @@ base_completa <- clientes %>%
   left_join(categorias) %>% 
   left_join(geolocalizacao %>% distinct(geolocation_zip_code_prefix), by = c('customer_zip_code_prefix' = 'geolocation_zip_code_prefix'))
 
+# Olhadela inicial na base:
+skim(base_completa)
+
 # Lembrando que a análise por item expande a base, mas a maoria dos pedidos é de um item somente.
 
 order_items %>% 
@@ -108,6 +111,7 @@ base_analise <- base_completa %>%
 # Como é a distribuição de Missings dos nossos Dados?
 
 # Visualização PARCIAL (20% da base) de Tipos e missings
+dev.off()
 set.seed(1234)
 vis_dat(base_analise %>% 
           sample_frac(0.2))
@@ -195,6 +199,7 @@ p2 <- base_analise %>%
 grid.arrange(p1, p2, nrow = 1)
 # Preço é extremamente assimétrico! Temos outliers com preços acima de R$6000
 # O mais comum é transformar essa variável para estabilizá-la se é desejável incluí-la na modelagem
+# Obs.: apenas "padronizar" a variável (isto é, sutrair a média e dividir pelo desvio padrão) não é suficiente para retirar a assimetria dela.
 
 pp1 <- base_analise %>% 
   ggplot(aes(y = log(price))) +

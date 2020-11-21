@@ -30,6 +30,7 @@ summary(reg_logistica)
 
 p <- predict(reg_logistica, base_teste, type = "response")
 
+# Probabilidades Individuais
 base_teste %>% 
   mutate(probabilidade_predita = p) %>% 
   View()
@@ -84,6 +85,7 @@ automl_model <- h2o.automl(
   seed = 1234)
 
 lb <- as.data.frame(automl_model@leaderboard)
+View(lb)
 aml_leader <- automl_model@leader
 
 #h2o.saveModel(object = aml_leader,

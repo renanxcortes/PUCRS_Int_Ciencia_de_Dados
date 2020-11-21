@@ -44,7 +44,7 @@ base_completa <- clientes %>%
 # Olhadela inicial na base:
 skim(base_completa)
 
-# Lembrando que a análise por item expande a base, mas a maoria dos pedidos é de um item somente.
+# Lembrando que a análise por item expande a base, mas a maioria dos pedidos é de um item somente.
 
 order_items %>% 
   count(order_item_id) %>% # Número de itens do mesmo pedido

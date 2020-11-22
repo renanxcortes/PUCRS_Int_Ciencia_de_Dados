@@ -133,6 +133,7 @@ base_analise <- base_analise %>%
 # Antes, vale a pena olhar no Grammar of Graphics:
 # https://vita.had.co.nz/papers/layered-grammar.html
 # grammar_of_graphics.png
+# Importância da Visualização de Dados: anscombe_quartet.png e people_land_vote.gif
 
 
 # Algumas Análises Univariadas ----

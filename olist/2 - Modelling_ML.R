@@ -53,7 +53,7 @@ ggplot(aux, aes(x = prob_predita, col = as.factor(group))) +
 
 # Vamos ver se a gente consegue melhorar ele com alguma outra estratégia.
 
-# Algoritmo: Diversos com AutoML do H2O (restringindo para somente modelos baseados em árvores)
+# Algoritmo: Diversos com AutoML do H2O
 # Estratégia de Validação: K-Fold Cross_validation
 # Estratégia de Checagem de Qualidade: o mesmo Holdout Set de antes
 # Fonte: https://towardsdatascience.com/a-minimal-example-combining-h2os-automl-and-shapley-s-decomposition-in-r-ba4481282c3c

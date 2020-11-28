@@ -111,7 +111,7 @@ base_analise <- base_completa %>%
 # Como é a distribuição de Missings dos nossos Dados?
 
 # Visualização PARCIAL (20% da base) de Tipos e missings
-dev.off()
+# Restartar o componente gráfico: dev.off()
 set.seed(1234)
 vis_dat(base_analise %>% 
           sample_frac(0.2))

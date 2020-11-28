@@ -157,6 +157,8 @@ base_analise %>%
   ggplot(aes(x = review_alto, y = n)) +
   geom_bar(stat ='identity')
 
+# Algumas Variáveis Categóricas ----
+
 # Estado
 
 base_analise %>% 
@@ -184,6 +186,8 @@ base_analise %>%
 base_analise %>% 
   count(product_category_name, sort = T) %>% 
   mutate(prop = n / sum(n))
+
+# Algumas Variáveis Numéricas ----
 
 # Preço
 
@@ -376,15 +380,18 @@ base_analise %>%
             min = min(frete_sobre_preco, na.rm = T),
             max = max(frete_sobre_preco, na.rm = T))
 
+# # Possível gráfico interessante comparativo entre dois grupos:
+# base_analise %>% 
+#   sample_frac(0.01) %>%
+#   mutate(log_price = log(price)) %>% 
+#   ggstatsplot::ggbetweenstats(
+#   x = review_alto,
+#   y = log_price,
+#   title = "Comparação do Log do Preço com Nota do Cliente"
+# )
+
 
 # ---- Interlúdio: Múltiplas Densidades e a limitação de Boxplots ---- #
-
-base_analise %>% 
-  mutate(cat_product_category_name = fct_lump(product_category_name, n = 7)) %>% 
-  group_by(cat_product_category_name) %>% 
-  summarize(mediana = median(price),
-            n = n()) %>% 
-  arrange(desc(mediana))
 
 # Relação de preço com product_category_name
 
